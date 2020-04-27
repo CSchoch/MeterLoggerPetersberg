@@ -1,0 +1,7 @@
+{
+    "terminal.integrated.env.windows": {
+        "PATH": "C:\\Users\\Chef\\.platformio\\penv\\Scripts;C:\\Users\\Chef\\.platformio\\penv;C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\javapath;C:\\ProgramData\\Oracle\\Java\\javapath;C:\\Windows\\Microsoft.NET\\Framework\\v1.1.4322\\;C:\\Program Files (x86)\\Borland\\BDS\\4.0\\Bin;C:\\Program Files (x86)\\Embarcadero\\RAD Studio\\8.0\\bin;C:\\Users\\Public\\Documents\\RAD Studio\\8.0\\Bpl;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Users\\Chef\\Documents\\Borland Studio-Projekte\\Bpl;C:\\Users\\Chef\\AppData\\Local\\Programs\\Microsoft VS Code\\bin;C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\javapath;C:\\ProgramData\\Oracle\\Java\\javapath;C:\\Windows\\Microsoft.NET\\Framework\\v1.1.4322\\;C:\\Program Files (x86)\\Borland\\BDS\\4.0\\Bin;C:\\Program Files (x86)\\Embarcadero\\RAD Studio\\8.0\\bin;C:\\Users\\Public\\Documents\\RAD Studio\\8.0\\Bpl;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Users\\Chef\\Documents\\Borland Studio-Projekte\\Bpl;C:\\Users\\Chef\\AppData\\Local\\Programs\\Microsoft VS Code\\bin",
+        "PLATFORMIO_CALLER": "vscode"
+    },
+    "C_Cpp.dimInactiveRegions": true
+}

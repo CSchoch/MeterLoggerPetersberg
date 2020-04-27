@@ -1,0 +1,3 @@
+[submodule "lib/OR_WE_Energy_Meter"]
+	path = lib/OR_WE_Energy_Meter
+	url = https://github.com/CSchoch/OR_WE_Energy_Meter.git
