@@ -3,39 +3,43 @@
 */
 
 #define LED_PIN 2
-#define ENERGY_RX_PIN 14 // for NodeMCU: GPIO4 = D1
-#define ENERGY_TX_PIN 26 // for NodeMCU: GPIO5 = D2
+#define ENERGY_RX_PIN 4  // for NodeMCU: GPIO4 = D1
+#define ENERGY_TX_PIN 15 // for NodeMCU: GPIO5 = D2
 #define ENERGY_ADR 1     // Modbus adress
 #define DEBUGLEVEL DEBUG
+#define MAX_PACKET_SIZE 512 // Max data packet size
 
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
 #define TIME_TO_SLEEP 10       /* Time ESP32 will go to sleep (in seconds) */
 
 #include <WiFi.h>
-#include <ArduinoOTA.h>
-
+#include "OTA.h"
 #include <PubSubClient.h> // https://github.com/knolleary/pubsubclient/blob/master/examples/mqtt_esp8266/mqtt_esp8266.ino
 #include <HardwareSerial.h>
 #include <ModbusMaster.h>
 #include <DebugUtils.h>
 #include <ArduinoJson.h>
+#include <OR_WE.h>
 
 //#include "Config.h" // make your own config file or remove this line and use the following lines
 const char *clientId = "Energy";
-const char *mqtt_server = "192.168.1.35";
-#include "WifiCredentials.h"       // const char* ssid = "MySSID"; const char* WifiPassword = "MyPw";
-#include "OTACredentials.h"        // const char* OtaPassword = "MyPw";
-IPAddress ip(192, 168, 2, 6);      // Static IP
+const char *mqtt_server = "192.168.2.64";
+#include "WifiCredentials.h" // const char* ssid = "MySSID"; const char* WifiPassword = "MyPw";
+IPAddress ip(192, 168, 2, 7);      // Static IP
 IPAddress dns(192, 168, 2, 1);     // most likely your router
 IPAddress gateway(192, 168, 2, 1); // most likely your router
 IPAddress subnet(255, 255, 255, 0);
+
 unsigned long lastUpdated;
 unsigned long lastLed;
+unsigned long entry;
+const char *nameprefix = "MeterLogger";
 uint8_t stateLed = HIGH;
 boolean updateActive;
 RTC_DATA_ATTR unsigned long bootCount;
 RTC_DATA_ATTR boolean enableUpdate;
 
+OR_WE EnergyMeter;
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
@@ -56,9 +60,16 @@ void update_led(unsigned long intervallHigh, unsigned long intervallLow)
 
 void setup_wifi()
 {
+  const int maxlen = 40;
+  char fullhostname[maxlen];
+  uint8_t mac[6];
   delay(10);
   DEBUGPRINTNONE("Connecting to ");
   DEBUGPRINTLNNONE(ssid);
+
+  WiFi.macAddress(mac);
+  snprintf(fullhostname, maxlen, "%s-%02x%02x%02x", nameprefix, mac[3], mac[4], mac[5]);
+  WiFi.setHostname(fullhostname);
   WiFi.config(ip, dns, gateway, subnet);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, WifiPassword);
@@ -90,6 +101,11 @@ void setup_wifi()
   DEBUGPRINTLNNONE("WiFi connected");
   DEBUGPRINTNONE("IP address: ");
   DEBUGPRINTLNNONE(WiFi.localIP());
+
+  if (enableUpdate)
+  {
+    setupOTA(fullhostname);
+  }
 }
 
 void mqttCallback(char *topic, byte *payload, unsigned int length)
@@ -181,384 +197,320 @@ void wifiReconnect()
   DEBUGPRINTLNNONE(WiFi.localIP());
 }
 
-// void setup() {
-//   bootCount ++;
-//   updateActive = enableUpdate;
-//   lastUpdated = millis();
-//   lastLed = millis();
-//   Serial.begin(115200);
-//   pinMode(LED_PIN, OUTPUT);
-//   DEBUGPRINTLNNONE("\nHardware serial started");
-//   DEBUGPRINTLNNONE(bootCount);
-//   Serial1.begin(9600, SERIAL_8N1, ENERGY_RX_PIN, ENERGY_TX_PIN);
-//   EnergyMeter.begin(ENERGY_ADR, Serial1);
-//   DEBUGPRINTLNNONE("\nEnergy meter serial started");
-//   setup_wifi();
-//   mqttClient.setServer(mqtt_server, 1883);
-//   mqttClient.setCallback(mqttCallback);
-//   // --------------------------------------------------------------------- OTA
-
-//   // Port defaults to 8266
-//   if (enableUpdate) {
-//     ArduinoOTA.setPort(8266);
-
-//     // Hostname defaults to esp8266-[ChipID]
-//     ArduinoOTA.setHostname(clientId);
-
-//     // No authentication by default
-//     ArduinoOTA.setPassword(OtaPassword);
-
-//     ArduinoOTA.onStart([]() {
-//       Serial.println("Start");
-//     });
-//     ArduinoOTA.onEnd([]() {
-//       enableUpdate = false;
-//       updateActive = false;
-//       DEBUGPRINTDEBUG("WiFi.disconnect");
-//       WiFi.disconnect();
-//       while (WiFi.status() == WL_CONNECTED) {
-//         DEBUGPRINTDEBUG('.');
-//       }
-//       DEBUGPRINTLNDEBUG("");
-//       Serial.println("\nEnd");
-//     });
-//     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-//       Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-//       Serial.println("");
-//     });
-//     ArduinoOTA.onError([](ota_error_t error) {
-//       Serial.printf("Error[%u]: ", error);
-//       if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-//       else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-//       else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-//       else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-//       else if (error == OTA_END_ERROR) Serial.println("End Failed");
-//     });
-//     ArduinoOTA.begin();
-//   }
-// }
-
-// void loop() {
-//   char Data[256];
-//   ArduinoOTA.handle();
-//   if (!mqttClient.connected()) {
-//     mqttReconnect();
-//   }
-//   mqttClient.loop();
-
-//   OutfeedMeter.loop();
-//   SolarMeter.loop();
-//   if (millis() - lastUpdated >= 10000 && OutfeedMeter.getAvailable() && SolarMeter.getAvailable()) {
-//     OutfeedMeter.resetAvailable();
-//     SolarMeter.resetAvailable();
-//     double value = SolarMeter.getTotalSupply() - OutfeedMeter.getTotalSupply();
-//     DEBUGPRINTNONE("Eigenverbrauch: ");
-//     DEBUGPRINTNONE(value);
-//     DEBUGPRINTNONE("kWh ");
-//     value = (value / SolarMeter.getTotalSupply()) * 100;
-//     DEBUGPRINTNONE(value);
-//     DEBUGPRINTLNNONE("%");
-
-//     value = SolarMeter.getActualPower();
-//     DEBUGPRINTNONE("Erzeugung: ");
-//     DEBUGPRINTNONE(value, 0);
-//     DEBUGPRINTLNNONE("W");
-
-//     value = OutfeedMeter.getActualPower();
-//     DEBUGPRINTNONE("Bezug: ");
-//     DEBUGPRINTNONE(value, 0);
-//     DEBUGPRINTLNNONE("W");
-
-//     value = OutfeedMeter.getActualPower() - SolarMeter.getActualPower();
-//     DEBUGPRINTNONE("Hausverbrauch: ");
-//     DEBUGPRINTNONE(value, 0);
-//     DEBUGPRINTLNNONE("W");
-
-//     const size_t capacity = JSON_OBJECT_SIZE(2) + 4*JSON_OBJECT_SIZE(3);
-//     DynamicJsonDocument doc(capacity);
-
-//     JsonObject Outfeed = doc.createNestedObject("Outfeed");
-//     sprintf(Data, "%ld", OutfeedMeter.getActualPower());
-//     Outfeed["actualPower"] = Data;
-//     sprintf(Data, "%lf", OutfeedMeter.getTotalConsumption());
-//     Outfeed["totalConsumption"] = Data;
-//     sprintf(Data, "%lf", OutfeedMeter.getTotalSupply());
-//     Outfeed["totalSupply"] = Data;
-
-//     JsonObject Solar = doc.createNestedObject("Solar");
-//     sprintf(Data, "%ld", SolarMeter.getActualPower());
-//     Solar["actualPower"] = Data;
-//     sprintf(Data, "%lf", SolarMeter.getTotalConsumption());
-//     Solar["totalConsumption"] = Data;
-//     sprintf(Data, "%lf", SolarMeter.getTotalSupply());
-//     Solar["totalSupply"] = Data;
-
-//     serializeJson(doc, Data, sizeof(Data));
-//     char* topic = "/MeterData";
-//     char* path = (char *)malloc(1 + strlen(clientId) + strlen(topic));
-//     strcpy(path, clientId);
-//     strcat(path, topic);
-//     if (!mqttClient.publish(path, Data, true)){
-//       DEBUGPRINTLNNONE("MQTT publish failed");
-//     }
-//     free(path);
-
-//     DEBUGPRINTDEBUG(topic);
-//     DEBUGPRINTDEBUG(" ");
-//     DEBUGPRINTLNDEBUG(Data);
-
-//     delay(100);
-//     update_led(500, 500);
-
-//     lastUpdated = millis();
-//   }
-//   else if (millis() - lastUpdated < 500) {
-//     update_led(500, 500);
-//   }
-//   else{
-//     update_led(100, 1000);
-//   }
-
-//   if ((!updateActive && enableUpdate) || (millis() - lastUpdated >= 60000))  {
-
-//     DEBUGPRINTLNDEBUG("MQTT disconnect");
-//     mqttClient.disconnect();
-//     while (mqttClient.connected()) {
-//       DEBUGPRINTDEBUG(".");
-//     }
-//     DEBUGPRINTLNDEBUG("");
-
-//     DEBUGPRINTDEBUG("WiFi.disconnect");
-//     WiFi.disconnect();
-//     while (WiFi.status() == WL_CONNECTED) {
-//       DEBUGPRINTDEBUG(".");
-//     }
-//     DEBUGPRINTLNDEBUG("");
-
-//     DEBUGPRINTLNDEBUG("Sleep");
-
-//     esp_sleep_enable_timer_wakeup(1 * uS_TO_S_FACTOR);
-//     delay(1 * 1000);
-//     esp_deep_sleep_start();
-//   }
-// }
-
-/*
-
-  Basic.pde - example using ModbusMaster library
-
-  Library:: ModbusMaster
-  Author:: Doc Walker <4-20ma@wvfans.net>
-
-  Copyright:: 2009-2016 Doc Walker
-
-  Licensed under the Apache License, Version 2.0 (the "License");
-  you may not use this file except in compliance with the License.
-  You may obtain a copy of the License at
-
-      http://www.apache.org/licenses/LICENSE-2.0
-
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
-
-*/
-
-#include <OR_WE.h>
-
-// instantiate ModbusMaster object
-OR_WE EnergyMeter;
-
 void setup()
 {
+  bootCount++;
+  updateActive = enableUpdate;
+  lastUpdated = millis();
+  lastLed = millis();
   Serial.begin(115200);
   DEBUGPRINTLNNONE("\nHardware serial started");
   DEBUGPRINTLNNONE(bootCount);
-  Serial1.begin(OR_WE_SERIAL_BAUD, OR_WE_SERIAL_MODE, ENERGY_RX_PIN, ENERGY_TX_PIN);
-
-  // communicate with Modbus slave ID 1 over Serial (port 1)
-  EnergyMeter.begin(Serial1, 1);
-}
-
-float getModbusFloat(uint16_t data[2])
-{
-  union u_data {
-    byte b[4];
-    uint16_t data[2];
-  } source;
-
-  union u_tag {
-    byte b[4];
-    float fval;
-  } dest;
-
-  source.data[0] = data[0];
-  source.data[1] = data[1];
-
-  dest.b[2] = source.b[0];
-  dest.b[3] = source.b[1];
-  dest.b[0] = source.b[2];
-  dest.b[1] = source.b[3];
-
-  return dest.fval;
+  pinMode(LED_PIN, OUTPUT);
+  if (!enableUpdate)
+  {
+    Serial1.begin(OR_WE_SERIAL_BAUD, OR_WE_SERIAL_MODE, ENERGY_RX_PIN, ENERGY_TX_PIN);
+    // communicate with Modbus slave ID 1 over Serial (port 1)
+    EnergyMeter.begin(Serial1, ENERGY_ADR);
+    DEBUGPRINTLNNONE("\nEnergy meter serial started");
+  }
+  setup_wifi();
+  mqttClient.setServer(mqtt_server, 1883);
+  mqttClient.setCallback(mqttCallback);
+  mqttClient.setBufferSize(MAX_PACKET_SIZE);
 }
 
 void loop()
 {
-  DEBUGPRINTLNNONE("Voltage");
-  DEBUGPRINTNONE("L1: ");
-  DEBUGPRINTNONE(EnergyMeter.getVoltageL1());
+  if (enableUpdate && !updateActive)
+  {
+    esp_deep_sleep(10 * uS_TO_S_FACTOR);
+  }
+  else if (enableUpdate)
+  {
+    ArduinoOTA.handle();
+    digitalWrite(LED_PIN, HIGH);
+  }
+  else
+  {
+    char Data[MAX_PACKET_SIZE];
 
-  DEBUGPRINTNONE(" L2: ");
-  DEBUGPRINTNONE(EnergyMeter.getVoltageL2());
+    if (!mqttClient.connected())
+    {
+      mqttReconnect();
+    }
+    mqttClient.loop();
 
-  DEBUGPRINTNONE(" L3: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getVoltageL3());
+    if (millis() - lastUpdated >= 10000)
+    {
+      float value;
+      const size_t capacity = JSON_OBJECT_SIZE(9) + JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(4) + 33 * sizeof(float);
+      DynamicJsonDocument doc(capacity);
 
-  DEBUGPRINTNONE("Freq: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getFrequency());
+      // Voltage
+      JsonObject Voltage = doc.createNestedObject("Voltage");
+      DEBUGPRINTLNDEBUG("Voltage");
+      value = EnergyMeter.getVoltageL1();
+      Voltage["L1"] = value;
+      DEBUGPRINTDEBUG("L1: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getVoltageL2();
+      Voltage["L2"] = value;
+      DEBUGPRINTDEBUG(" L2: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getVoltageL3();
+      Voltage["L3"] = value;
+      DEBUGPRINTDEBUG(" L3: ");
+      DEBUGPRINTLNDEBUG(value);
 
-  //Current
-  DEBUGPRINTLNNONE("Current");
-  DEBUGPRINTNONE("L1: ");
-  DEBUGPRINTNONE(EnergyMeter.getCurrentL1());
-  DEBUGPRINTNONE(" L2: ");
-  DEBUGPRINTNONE(EnergyMeter.getCurrentL2());
-  DEBUGPRINTNONE(" L3: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getCurrentL3());
+      JsonObject Freq = doc.createNestedObject("Freq");
+      value = EnergyMeter.getFrequency();
+      Freq["value"] = value;
+      DEBUGPRINTDEBUG("Freq: ");
+      DEBUGPRINTLNDEBUG(value);
 
-  //Active Power
-  DEBUGPRINTLNNONE("ActivePower");
-  DEBUGPRINTNONE("Total ");
-  DEBUGPRINTNONE(EnergyMeter.getActivePowerTotal());
-  DEBUGPRINTNONE(" L1: ");
-  DEBUGPRINTNONE(EnergyMeter.getActivePowerL1());
-  DEBUGPRINTNONE(" L2: ");
-  DEBUGPRINTNONE(EnergyMeter.getActivePowerL2());
-  DEBUGPRINTNONE(" L3: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getActivePowerL3());
+      //Current
+      JsonObject Current = doc.createNestedObject("Current");
+      DEBUGPRINTLNDEBUG("Current");
+      value = EnergyMeter.getCurrentL1();
+      Current["L1"] = value;
+      DEBUGPRINTDEBUG("L1: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getCurrentL2();
+      Current["L2"] = value;
+      DEBUGPRINTDEBUG(" L2: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getCurrentL3();
+      Current["L3"] = value;
+      DEBUGPRINTDEBUG(" L3: ");
+      DEBUGPRINTLNDEBUG(value);
 
-  //Reactive Power
-  DEBUGPRINTLNNONE("Reactive Power");
-  DEBUGPRINTNONE("Total: ");
-  DEBUGPRINTNONE(EnergyMeter.getReactivePowerTotal());
-  DEBUGPRINTNONE(" L1: ");
-  DEBUGPRINTNONE(EnergyMeter.getReactivePowerL1());
-  DEBUGPRINTNONE(" L2: ");
-  DEBUGPRINTNONE(EnergyMeter.getReactivePowerL2());
-  DEBUGPRINTNONE(" L3: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getReactivePowerL3());
+      //Active Power
+      JsonObject ActPower = doc.createNestedObject("ActivePower");
+      value = EnergyMeter.getActivePowerTotal();
+      DEBUGPRINTNONE("Bezug: ");
+      DEBUGPRINTNONE(value, 0);
+      DEBUGPRINTLNNONE("W");
+      DEBUGPRINTLNDEBUG("ActivePower");
+      ActPower["Total"] = value;
+      DEBUGPRINTDEBUG("Total ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getActivePowerL1();
+      ActPower["L1"] = value;
+      DEBUGPRINTDEBUG(" L1: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getActivePowerL2();
+      ActPower["L2"] = value;
+      DEBUGPRINTDEBUG(" L2: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getActivePowerL3();
+      ActPower["L3"] = value;
+      DEBUGPRINTDEBUG(" L3: ");
+      DEBUGPRINTLNDEBUG(value);
 
-  //Apparent Power
-  DEBUGPRINTLNNONE("Apparent Power");
-  DEBUGPRINTNONE("Total: ");
-  DEBUGPRINTNONE(EnergyMeter.getApparentPowerTotal());
-  DEBUGPRINTNONE(" L1: ");
-  DEBUGPRINTNONE(EnergyMeter.getApparentPowerL1());
-  DEBUGPRINTNONE(" L2: ");
-  DEBUGPRINTNONE(EnergyMeter.getApparentPowerL2());
-  DEBUGPRINTNONE(" L3: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getApparentPowerL3());
+      //Reactive Power
+      JsonObject ReactPower = doc.createNestedObject("ReactivePower");
+      DEBUGPRINTLNDEBUG("Reactive Power");
+      value = EnergyMeter.getReactivePowerTotal();
+      ReactPower["Total"] = value;
+      DEBUGPRINTDEBUG("Total: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getReactivePowerL1();
+      ReactPower["L1"] = value;
+      DEBUGPRINTDEBUG(" L1: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getReactivePowerL2();
+      ReactPower["L2"] = value;
+      DEBUGPRINTDEBUG(" L2: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getReactivePowerL3();
+      ReactPower["L3"] = value;
+      DEBUGPRINTDEBUG(" L3: ");
+      DEBUGPRINTLNDEBUG(value);
 
-  //Power Factor
-  DEBUGPRINTLNNONE("Power Factor");
-  DEBUGPRINTNONE("Total: ");
-  DEBUGPRINTNONE(EnergyMeter.getPowerFactorTotal());
-  DEBUGPRINTNONE(" L1: ");
-  DEBUGPRINTNONE(EnergyMeter.getPowerPowerFactorL1());
-  DEBUGPRINTNONE(" L2: ");
-  DEBUGPRINTNONE(EnergyMeter.getPowerPowerFactorL2());
-  DEBUGPRINTNONE(" L3: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getPowerPowerFactorL3());
+      //Apparent Power
+      JsonObject AppPower = doc.createNestedObject("ApparentPower");
+      DEBUGPRINTLNDEBUG("Apparent Power");
+      value = EnergyMeter.getApparentPowerTotal();
+      AppPower["Total"] = value;
+      DEBUGPRINTDEBUG("Total: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getApparentPowerL1();
+      AppPower["L1"] = value;
+      DEBUGPRINTDEBUG(" L1: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getApparentPowerL2();
+      AppPower["L2"] = value;
+      DEBUGPRINTDEBUG(" L2: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getApparentPowerL3();
+      AppPower["L3"] = value;
+      DEBUGPRINTDEBUG(" L3: ");
+      DEBUGPRINTLNDEBUG(value);
 
-  //Counter
-  DEBUGPRINTLNNONE("Counter Active Power");
-  DEBUGPRINTNONE("Total: ");
-  DEBUGPRINTNONE(EnergyMeter.getTotalCounterActivePowerTotal());
-  DEBUGPRINTNONE(" L1: ");
-  DEBUGPRINTNONE(EnergyMeter.getTotalCounterActivePowerL1());
-  DEBUGPRINTNONE(" L2: ");
-  DEBUGPRINTNONE(EnergyMeter.getTotalCounterActivePowerL2());
-  DEBUGPRINTNONE(" L3: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getTotalCounterActivePowerL3());
+      //Power Factor
+      JsonObject PowerFactor = doc.createNestedObject("PowerFactor");
+      DEBUGPRINTLNDEBUG("Power Factor");
+      value = EnergyMeter.getPowerFactorTotal();
+      PowerFactor["Total"] = value;
+      DEBUGPRINTDEBUG("Total: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getPowerFactorL1();
+      PowerFactor["L1"] = value;
+      DEBUGPRINTDEBUG(" L1: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getPowerFactorL2();
+      PowerFactor["L2"] = value;
+      DEBUGPRINTDEBUG(" L2: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getPowerFactorL3();
+      PowerFactor["L3"] = value;
+      DEBUGPRINTDEBUG(" L3: ");
+      DEBUGPRINTLNDEBUG(value);
 
-  DEBUGPRINTLNNONE("Counter Reactive Power");
-  DEBUGPRINTNONE("Total: ");
-  DEBUGPRINTNONE(EnergyMeter.getTotalCounterReactivePowerTotal());
-  DEBUGPRINTNONE(" L1: ");
-  DEBUGPRINTNONE(EnergyMeter.getTotalCounterReactivePowerL1());
-  DEBUGPRINTNONE(" L2: ");
-  DEBUGPRINTNONE(EnergyMeter.getTotalCounterReactivePowerL2());
-  DEBUGPRINTNONE(" L3: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getTotalCounterReactivePowerL3());
+      //Counter
+      JsonObject CounterActPower = doc.createNestedObject("CountActPower");
+      value = EnergyMeter.getTotalCounterActivePowerTotal();
+      DEBUGPRINTNONE("Verbrauch: ");
+      DEBUGPRINTNONE(value);
+      DEBUGPRINTLNNONE("kWh ");
+      DEBUGPRINTLNDEBUG("Counter Active Power");
+      CounterActPower["Total"] = value;
+      DEBUGPRINTDEBUG("Total: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getTotalCounterActivePowerL1();
+      CounterActPower["L1"] = value;
+      DEBUGPRINTDEBUG(" L1: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getTotalCounterActivePowerL2();
+      CounterActPower["L2"] = value;
+      DEBUGPRINTDEBUG(" L2: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getTotalCounterActivePowerL3();
+      CounterActPower["L3"] = value;
+      DEBUGPRINTDEBUG(" L3: ");
+      DEBUGPRINTLNDEBUG(value);
 
-  //Counter Import
-  DEBUGPRINTLNNONE("Counter Import Active Power");
-  DEBUGPRINTNONE("Total: ");
-  DEBUGPRINTNONE(EnergyMeter.getImportCounterActivePowerTotal());
-  DEBUGPRINTNONE(" L1: ");
-  DEBUGPRINTNONE(EnergyMeter.getImportCounterActivePowerL1());
-  DEBUGPRINTNONE(" L2: ");
-  DEBUGPRINTNONE(EnergyMeter.getImportCounterActivePowerL2());
-  DEBUGPRINTNONE(" L3: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getImportCounterActivePowerL3());
+      JsonObject CounterReactPower = doc.createNestedObject("CountReactPower");
+      DEBUGPRINTLNDEBUG("Counter Reactive Power");
+      value = EnergyMeter.getTotalCounterReactivePowerTotal();
+      CounterReactPower["Total"] = value;
+      DEBUGPRINTDEBUG("Total: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getTotalCounterReactivePowerL1();
+      CounterReactPower["L1"] = value;
+      DEBUGPRINTDEBUG(" L1: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getTotalCounterReactivePowerL2();
+      CounterReactPower["L2"] = value;
+      DEBUGPRINTDEBUG(" L2: ");
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getTotalCounterReactivePowerL3();
+      CounterReactPower["L3"] = value;
+      DEBUGPRINTDEBUG(" L3: ");
+      DEBUGPRINTLNDEBUG(value);
 
-  DEBUGPRINTLNNONE("Counter Import Reactive Power");
-  DEBUGPRINTNONE("Total: ");
-  DEBUGPRINTNONE(EnergyMeter.getImportCounterReactivePowerTotal());
-  DEBUGPRINTNONE(" L1: ");
-  DEBUGPRINTNONE(EnergyMeter.getImportCounterReactivePowerL1());
-  DEBUGPRINTNONE(" L2: ");
-  DEBUGPRINTNONE(EnergyMeter.getImportCounterReactivePowerL2());
-  DEBUGPRINTNONE(" L3: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getImportCounterReactivePowerL3());
+      //Counter Import
+      DEBUGPRINTLNDEBUG("Counter Import Active Power");
+      DEBUGPRINTDEBUG("Total: ");
+      DEBUGPRINTDEBUG(EnergyMeter.getImportCounterActivePowerTotal());
+      DEBUGPRINTDEBUG(" L1: ");
+      DEBUGPRINTDEBUG(EnergyMeter.getImportCounterActivePowerL1());
+      DEBUGPRINTDEBUG(" L2: ");
+      DEBUGPRINTDEBUG(EnergyMeter.getImportCounterActivePowerL2());
+      DEBUGPRINTDEBUG(" L3: ");
+      DEBUGPRINTLNDEBUG(EnergyMeter.getImportCounterActivePowerL3());
 
-  //Counter Export
-  DEBUGPRINTLNNONE("Counter Export Active Power");
-  DEBUGPRINTNONE("Total: ");
-  DEBUGPRINTNONE(EnergyMeter.getExportCounterActivePowerTotal());
-  DEBUGPRINTNONE(" L1: ");
-  DEBUGPRINTNONE(EnergyMeter.getExportCounterActivePowerL1());
-  DEBUGPRINTNONE(" L2: ");
-  DEBUGPRINTNONE(EnergyMeter.getExportCounterActivePowerL2());
-  DEBUGPRINTNONE(" L3: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getExportCounterActivePowerL3());
+      DEBUGPRINTLNDEBUG("Counter Import Reactive Power");
+      DEBUGPRINTDEBUG("Total: ");
+      DEBUGPRINTDEBUG(EnergyMeter.getImportCounterReactivePowerTotal());
+      DEBUGPRINTDEBUG(" L1: ");
+      DEBUGPRINTDEBUG(EnergyMeter.getImportCounterReactivePowerL1());
+      DEBUGPRINTDEBUG(" L2: ");
+      DEBUGPRINTDEBUG(EnergyMeter.getImportCounterReactivePowerL2());
+      DEBUGPRINTDEBUG(" L3: ");
+      DEBUGPRINTLNDEBUG(EnergyMeter.getImportCounterReactivePowerL3());
 
-  DEBUGPRINTLNNONE("Counter Export Reactive Power");
-  DEBUGPRINTNONE("Total: ");
-  DEBUGPRINTNONE(EnergyMeter.getExportCounterReactivePowerTotal());
-  DEBUGPRINTNONE(" L1: ");
-  DEBUGPRINTNONE(EnergyMeter.getExportCounterReactivePowerL1());
-  DEBUGPRINTNONE(" L2: ");
-  DEBUGPRINTNONE(EnergyMeter.getExportCounterReactivePowerL2());
-  DEBUGPRINTNONE(" L3: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getExportCounterReactivePowerL3());
+      //Counter Export
+      DEBUGPRINTLNDEBUG("Counter Export Active Power");
+      DEBUGPRINTDEBUG("Total: ");
+      DEBUGPRINTDEBUG(EnergyMeter.getExportCounterActivePowerTotal());
+      DEBUGPRINTDEBUG(" L1: ");
+      DEBUGPRINTDEBUG(EnergyMeter.getExportCounterActivePowerL1());
+      DEBUGPRINTDEBUG(" L2: ");
+      DEBUGPRINTDEBUG(EnergyMeter.getExportCounterActivePowerL2());
+      DEBUGPRINTDEBUG(" L3: ");
+      DEBUGPRINTLNDEBUG(EnergyMeter.getExportCounterActivePowerL3());
 
-  DEBUGPRINTNONE("getSerialNo: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getSerialNo());
-  DEBUGPRINTNONE("getMeterId: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getMeterId());
-  DEBUGPRINTNONE("getBusBaud: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getBusBaud());
-  DEBUGPRINTNONE("getSoftwareVersion: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getSoftwareVersion());
-  DEBUGPRINTNONE("getHardwareVersion: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getHardwareVersion());
-  DEBUGPRINTNONE("getCountRate: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getCountRate());
-  DEBUGPRINTNONE("getS0Rate: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getS0Rate());
-  DEBUGPRINTNONE("getA3: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getA3());
-  DEBUGPRINTNONE("getCycleTime: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getCycleTime());
-  DEBUGPRINTNONE("getCrc: ");
-  DEBUGPRINTLNNONE(EnergyMeter.getCrc());
-  //DEBUGPRINTNONE("getCombinedCode: ");
-  //DEBUGPRINTLNNONE(EnergyMeter.getCombinedCode());
+      DEBUGPRINTLNDEBUG("Counter Export Reactive Power");
+      DEBUGPRINTDEBUG("Total: ");
+      DEBUGPRINTDEBUG(EnergyMeter.getExportCounterReactivePowerTotal());
+      DEBUGPRINTDEBUG(" L1: ");
+      DEBUGPRINTDEBUG(EnergyMeter.getExportCounterReactivePowerL1());
+      DEBUGPRINTDEBUG(" L2: ");
+      DEBUGPRINTDEBUG(EnergyMeter.getExportCounterReactivePowerL2());
+      DEBUGPRINTDEBUG(" L3: ");
+      DEBUGPRINTLNDEBUG(EnergyMeter.getExportCounterReactivePowerL3());
 
-  DEBUGPRINTLNNONE("");
-  delay(500);
+      DEBUGPRINTDEBUG("getSerialNo: ");
+      DEBUGPRINTLNDEBUG(EnergyMeter.getSerialNo());
+      DEBUGPRINTDEBUG("getMeterId: ");
+      DEBUGPRINTLNDEBUG(EnergyMeter.getMeterId());
+      DEBUGPRINTDEBUG("getBusBaud: ");
+      DEBUGPRINTLNDEBUG(EnergyMeter.getBusBaud());
+      DEBUGPRINTDEBUG("getSoftwareVersion: ");
+      DEBUGPRINTLNDEBUG(EnergyMeter.getSoftwareVersion());
+      DEBUGPRINTDEBUG("getHardwareVersion: ");
+      DEBUGPRINTLNDEBUG(EnergyMeter.getHardwareVersion());
+      DEBUGPRINTDEBUG("getCountRate: ");
+      DEBUGPRINTLNDEBUG(EnergyMeter.getCountRate());
+      DEBUGPRINTDEBUG("getS0Rate: ");
+      DEBUGPRINTLNDEBUG(EnergyMeter.getS0Rate());
+      DEBUGPRINTDEBUG("getA3: ");
+      DEBUGPRINTLNDEBUG(EnergyMeter.getA3());
+      DEBUGPRINTDEBUG("getCycleTime: ");
+      DEBUGPRINTLNDEBUG(EnergyMeter.getCycleTime());
+      DEBUGPRINTDEBUG("getCrc: ");
+      DEBUGPRINTLNDEBUG(EnergyMeter.getCrc());
+
+      DEBUGPRINTDEBUG("MemUsage.........: ");
+      DEBUGPRINTLNDEBUG(doc.memoryUsage());
+
+      serializeJson(doc, Data, sizeof(Data));
+      char *topic = "/MeterData";
+      char *path = (char *)malloc(1 + strlen(clientId) + strlen(topic));
+      strcpy(path, clientId);
+      strcat(path, topic);
+
+      DEBUGPRINTDEBUG("StringSize.........: ");
+      DEBUGPRINTLNDEBUG(strlen(Data));
+
+      if (mqttClient.publish(path, Data, true))
+      {
+        lastUpdated = millis();
+      }
+      else
+      {
+        DEBUGPRINTLNNONE("MQTT publish failed");
+      }
+      free(path);
+
+      DEBUGPRINTDEBUG(topic);
+      DEBUGPRINTDEBUG(" ");
+      DEBUGPRINTLNDEBUG(Data);
+
+      delay(100);
+      update_led(500, 500);
+
+      lastUpdated = millis();
+    }
+    else if (millis() - lastUpdated < 500)
+    {
+      update_led(500, 500);
+    }
+    else
+    {
+      update_led(100, 1000);
+    }
+  }
 }
