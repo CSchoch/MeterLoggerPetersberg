@@ -131,6 +131,34 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
   //}
 }
 
+void wifiReconnect()
+{
+  WiFi.disconnect();
+  while (WiFi.status() == WL_CONNECTED)
+  {
+    DEBUGPRINTNONE(".");
+    delay(10);
+  }
+  DEBUGPRINTNONE("Reconnecting to ");
+  DEBUGPRINTLNNONE(ssid);
+  int counter = 0;
+  WiFi.begin(ssid, WifiPassword);
+  while (WiFi.status() != WL_CONNECTED and counter < 20)
+  {
+    DEBUGPRINTNONE(".");
+    counter++;
+    unsigned long timer = millis();
+    while (millis() - timer <= 500)
+    {
+      update_led(100, 100);
+    }
+    //delay(500);
+  }
+  DEBUGPRINTLNNONE("WiFi connected");
+  DEBUGPRINTNONE("IP address: ");
+  DEBUGPRINTLNNONE(WiFi.localIP());
+}
+
 void mqttReconnect()
 {
   // Loop until we're reconnected
@@ -170,42 +198,14 @@ void mqttReconnect()
   }
 }
 
-void wifiReconnect()
-{
-  WiFi.disconnect();
-  while (WiFi.status() == WL_CONNECTED)
-  {
-    DEBUGPRINTNONE(".");
-    delay(10);
-  }
-  DEBUGPRINTNONE("Reconnecting to ");
-  DEBUGPRINTLNNONE(ssid);
-  int counter = 0;
-  WiFi.begin(ssid, WifiPassword);
-  while (WiFi.status() != WL_CONNECTED and counter < 20)
-  {
-    DEBUGPRINTNONE(".");
-    counter++;
-    unsigned long timer = millis();
-    while (millis() - timer <= 500)
-    {
-      update_led(100, 100);
-    }
-    //delay(500);
-  }
-  DEBUGPRINTLNNONE("WiFi connected");
-  DEBUGPRINTNONE("IP address: ");
-  DEBUGPRINTLNNONE(WiFi.localIP());
-}
-
 void setup()
 {
+    Serial.begin(115200);
+  DEBUGPRINTLNNONE("\nHardware serial started");
   bootCount++;
   updateActive = enableUpdate;
   lastUpdated = millis();
   lastLed = millis();
-  Serial.begin(115200);
-  DEBUGPRINTLNNONE("\nHardware serial started");
   DEBUGPRINTLNNONE(bootCount);
   pinMode(LED_PIN, OUTPUT);
   if (!enableUpdate)
