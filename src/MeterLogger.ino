@@ -16,7 +16,6 @@
 #include "OTA.h"
 #include <PubSubClient.h> // https://github.com/knolleary/pubsubclient/blob/master/examples/mqtt_esp8266/mqtt_esp8266.ino
 #include <HardwareSerial.h>
-#include <ModbusMaster.h>
 #include <DebugUtils.h>
 #include <ArduinoJson.h>
 #include <OR_WE.h>
@@ -40,7 +39,7 @@ RTC_DATA_ATTR unsigned long bootCount;
 RTC_DATA_ATTR boolean enableUpdate;
 size_t DebugMessage;
 
-OR_WE EnergyMeter;
+OR_WE_THREE_PHASE EnergyMeter;
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
