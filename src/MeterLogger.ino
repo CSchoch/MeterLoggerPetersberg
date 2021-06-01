@@ -244,8 +244,7 @@ void loop()
     {
       lastUpdated = millis();
       float value;
-      const size_t capacity = JSON_OBJECT_SIZE(9) + 2 * JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(1) + 13 * JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(2);
-      DynamicJsonDocument doc(capacity);
+      DynamicJsonDocument doc(1024);
 
       // Voltage
       JsonObject Voltage = doc.createNestedObject("Voltage");
