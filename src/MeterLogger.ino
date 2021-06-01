@@ -199,7 +199,7 @@ void mqttReconnect()
 
 void setup()
 {
-    Serial.begin(115200);
+  Serial.begin(115200);
   DEBUGPRINTLNNONE("\nHardware serial started");
   bootCount++;
   updateActive = enableUpdate;
@@ -234,7 +234,6 @@ void loop()
   else
   {
     char Data[MAX_PACKET_SIZE];
-
     if (!mqttClient.connected())
     {
       mqttReconnect();
@@ -245,7 +244,7 @@ void loop()
     {
       lastUpdated = millis();
       float value;
-      const size_t capacity = JSON_OBJECT_SIZE(9) + 2 * JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(1) + 6 * JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(2);
+      const size_t capacity = JSON_OBJECT_SIZE(9) + 2 * JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(1) + 13 * JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(2);
       DynamicJsonDocument doc(capacity);
 
       // Voltage
@@ -419,49 +418,85 @@ void loop()
       DEBUGPRINTDEBUG(value);
       DEBUGPRINTLNDEBUG(" kvarh");
       //Counter Import
+      JsonObject CounterImportActPower = doc.createNestedObject("CountImportActPower");
       DEBUGPRINTLNDEBUG("Counter Import Active Power");
+      value = EnergyMeter.getImportCounterActivePowerTotal();
+      CounterImportActPower["Total"] = value;
       DEBUGPRINTDEBUG("Total: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getImportCounterActivePowerTotal());
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getImportCounterActivePowerL1();
+      CounterImportActPower["L1"] = value;
       DEBUGPRINTDEBUG(" L1: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getImportCounterActivePowerL1());
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getImportCounterActivePowerL2();
+      CounterImportActPower["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getImportCounterActivePowerL2());
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getImportCounterActivePowerL3();
+      CounterImportActPower["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getImportCounterActivePowerL3());
+      DEBUGPRINTDEBUG(value);
       DEBUGPRINTLNDEBUG(" kWh");
 
+      JsonObject CounterImportReactPower = doc.createNestedObject("CountImportReactPower");
       DEBUGPRINTLNDEBUG("Counter Import Reactive Power");
+      value = EnergyMeter.getImportCounterReactivePowerTotal();
+      CounterImportReactPower["Total"] = value;
       DEBUGPRINTDEBUG("Total: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getImportCounterReactivePowerTotal());
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getImportCounterReactivePowerL1();
+      CounterImportReactPower["L1"] = value;
       DEBUGPRINTDEBUG(" L1: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getImportCounterReactivePowerL1());
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getImportCounterReactivePowerL2();
+      CounterImportReactPower["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getImportCounterReactivePowerL2());
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getImportCounterReactivePowerL3();
+      CounterImportReactPower["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getImportCounterReactivePowerL3());
+      DEBUGPRINTDEBUG(value);
       DEBUGPRINTLNDEBUG(" kvarh");
 
       //Counter Export
+      JsonObject CounterExportActPower = doc.createNestedObject("CountExportActPower");
       DEBUGPRINTLNDEBUG("Counter Export Active Power");
+      value = EnergyMeter.getExportCounterActivePowerTotal();
+      CounterExportActPower["Total"] = value;
       DEBUGPRINTDEBUG("Total: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getExportCounterActivePowerTotal());
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getExportCounterActivePowerL1();
+      CounterExportActPower["L1"] = value;
       DEBUGPRINTDEBUG(" L1: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getExportCounterActivePowerL1());
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getExportCounterActivePowerL2();
+      CounterExportActPower["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getExportCounterActivePowerL2());
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getExportCounterActivePowerL3();
+      CounterExportActPower["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getExportCounterActivePowerL3());
+      DEBUGPRINTDEBUG(value);
       DEBUGPRINTLNDEBUG(" kWh");
 
+      JsonObject CounterExportReactPower = doc.createNestedObject("CountExportReactPower");
       DEBUGPRINTLNDEBUG("Counter Export Reactive Power");
+      value = EnergyMeter.getExportCounterReactivePowerTotal();
+      CounterExportReactPower["Total"] = value;
       DEBUGPRINTDEBUG("Total: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getExportCounterReactivePowerTotal());
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getExportCounterReactivePowerL1();
+      CounterExportReactPower["L1"] = value;
       DEBUGPRINTDEBUG(" L1: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getExportCounterReactivePowerL1());
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getExportCounterReactivePowerL2();
+      CounterExportReactPower["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getExportCounterReactivePowerL2());
+      DEBUGPRINTDEBUG(value);
+      value = EnergyMeter.getExportCounterReactivePowerL3();
+      CounterExportReactPower["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
-      DEBUGPRINTDEBUG(EnergyMeter.getExportCounterReactivePowerL3());
+      DEBUGPRINTDEBUG(value);
       DEBUGPRINTLNDEBUG(" kvarh");
 
       DEBUGPRINTDEBUG("getSerialNo: ");
