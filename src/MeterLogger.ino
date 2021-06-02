@@ -519,9 +519,6 @@ void loop()
       DEBUGPRINTDEBUG("getCrc: ");
       DEBUGPRINTLNDEBUG(EnergyMeter.getCrc());
 
-      JsonObject Debug = doc.createNestedObject("Debug");
-      Debug["Msg"] = DebugMessage;
-
       DEBUGPRINTDEBUG("MemUsage.........: ");
       DEBUGPRINTLNDEBUG(doc.memoryUsage());
 
