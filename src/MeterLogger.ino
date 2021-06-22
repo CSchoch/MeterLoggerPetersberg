@@ -18,13 +18,13 @@
 #include <HardwareSerial.h>
 #include <DebugUtils.h>
 #include <ArduinoJson.h>
-#include <OR_WE.h>
+#include <SDM.h>
 
 //#include "Config.h" // make your own config file or remove this line and use the following lines
-const char *clientId = "Energy";
+const char *clientId = "Energy2";
 const char *mqtt_server = "192.168.2.64";
 #include "WifiCredentials.h"       // const char* ssid = "MySSID"; const char* WifiPassword = "MyPw";
-IPAddress ip(192, 168, 2, 7);      // Static IP
+IPAddress ip(192, 168, 2, 10);      // Static IP
 IPAddress dns(192, 168, 2, 1);     // most likely your router
 IPAddress gateway(192, 168, 2, 1); // most likely your router
 IPAddress subnet(255, 255, 255, 0);
@@ -32,14 +32,14 @@ IPAddress subnet(255, 255, 255, 0);
 unsigned long lastUpdated;
 unsigned long lastLed;
 unsigned long entry;
-const char *nameprefix = "MeterLogger";
+const char *nameprefix = "MeterLogger2";
 uint8_t stateLed = HIGH;
 boolean updateActive;
 RTC_DATA_ATTR unsigned long bootCount;
 RTC_DATA_ATTR boolean enableUpdate;
 size_t DebugMessage;
 
-OR_WE_THREE_PHASE EnergyMeter;
+SDM EnergyMeter(Serial1, 9600, NOT_A_PIN, SDM_UART_CONFIG, ENERGY_RX_PIN, ENERGY_TX_PIN);
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
@@ -209,9 +209,10 @@ void setup()
   pinMode(LED_PIN, OUTPUT);
   if (!enableUpdate)
   {
-    Serial1.begin(OR_WE_SERIAL_BAUD, OR_WE_SERIAL_MODE, ENERGY_RX_PIN, ENERGY_TX_PIN);
+    //Serial1.begin(OR_WE_SERIAL_BAUD, OR_WE_SERIAL_MODE, ENERGY_RX_PIN, ENERGY_TX_PIN);
     // communicate with Modbus slave ID 1 over Serial (port 1)
-    EnergyMeter.begin(Serial1, ENERGY_ADR);
+    //EnergyMeter.begin(Serial1, ENERGY_ADR);
+    EnergyMeter.begin();
     DEBUGPRINTLNNONE("\nEnergy meter serial started");
   }
   setup_wifi();
@@ -240,31 +241,32 @@ void loop()
     }
     mqttClient.loop();
 
-    if (millis() - lastUpdated >= 10000)
+    if (millis() - lastUpdated >= TIME_TO_SLEEP * 1000)
     {
       lastUpdated = millis();
       float value;
       DynamicJsonDocument doc(1024);
 
       // Voltage
+  
       JsonObject Voltage = doc.createNestedObject("Voltage");
       DEBUGPRINTLNDEBUG("Voltage");
-      value = EnergyMeter.getVoltageL1();
+      value = EnergyMeter.readVal(SDM_PHASE_1_VOLTAGE);
       Voltage["L1"] = value;
       DEBUGPRINTDEBUG("L1: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getVoltageL2();
+      value = EnergyMeter.readVal(SDM_PHASE_2_VOLTAGE);
       Voltage["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getVoltageL3();
+      value = EnergyMeter.readVal(SDM_PHASE_3_VOLTAGE);
       Voltage["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
       DEBUGPRINTDEBUG(value);
       DEBUGPRINTLNDEBUG(" V");
 
       JsonObject Freq = doc.createNestedObject("Freq");
-      value = EnergyMeter.getFrequency();
+      value = EnergyMeter.readVal(SDM_FREQUENCY);
       Freq["value"] = value;
       DEBUGPRINTDEBUG("Freq: ");
       DEBUGPRINTDEBUG(value);
@@ -273,15 +275,15 @@ void loop()
       //Current
       JsonObject Current = doc.createNestedObject("Current");
       DEBUGPRINTLNDEBUG("Current");
-      value = EnergyMeter.getCurrentL1();
+      value = EnergyMeter.readVal(SDM_PHASE_1_CURRENT);
       Current["L1"] = value;
       DEBUGPRINTDEBUG("L1: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getCurrentL2();
+      value = EnergyMeter.readVal(SDM_PHASE_2_CURRENT);
       Current["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getCurrentL3();
+      value = EnergyMeter.readVal(SDM_PHASE_3_CURRENT);
       Current["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
       DEBUGPRINTDEBUG(value);
@@ -289,7 +291,7 @@ void loop()
 
       //Active Power
       JsonObject ActPower = doc.createNestedObject("ActivePower");
-      value = EnergyMeter.getActivePowerTotal() * 1000;
+      value = EnergyMeter.readVal(SDM_TOTAL_SYSTEM_POWER);
       DEBUGPRINTNONE("Bezug: ");
       DEBUGPRINTNONE(value, 0);
       DEBUGPRINTLNNONE("W");
@@ -297,15 +299,15 @@ void loop()
       ActPower["Total"] = value;
       DEBUGPRINTDEBUG("Total ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getActivePowerL1() * 1000;
+      value = EnergyMeter.readVal(SDM_PHASE_1_POWER);
       ActPower["L1"] = value;
       DEBUGPRINTDEBUG(" L1: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getActivePowerL2() * 1000;
+      value = EnergyMeter.readVal(SDM_PHASE_2_POWER);
       ActPower["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getActivePowerL3() * 1000;
+      value = EnergyMeter.readVal(SDM_PHASE_3_POWER);
       ActPower["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
       DEBUGPRINTDEBUG(value);
@@ -314,19 +316,19 @@ void loop()
       //Reactive Power
       JsonObject ReactPower = doc.createNestedObject("ReactivePower");
       DEBUGPRINTLNDEBUG("Reactive Power");
-      value = EnergyMeter.getReactivePowerTotal() * 1000;
+      value = EnergyMeter.readVal(SDM_TOTAL_SYSTEM_REACTIVE_POWER);
       ReactPower["Total"] = value;
       DEBUGPRINTDEBUG("Total: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getReactivePowerL1() * 1000;
+      value = EnergyMeter.readVal(SDM_PHASE_1_REACTIVE_POWER);
       ReactPower["L1"] = value;
       DEBUGPRINTDEBUG(" L1: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getReactivePowerL2() * 1000;
+      value = EnergyMeter.readVal(SDM_PHASE_2_REACTIVE_POWER);
       ReactPower["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getReactivePowerL3() * 1000;
+      value = EnergyMeter.readVal(SDM_PHASE_3_REACTIVE_POWER);
       ReactPower["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
       DEBUGPRINTDEBUG(value);
@@ -335,19 +337,19 @@ void loop()
       //Apparent Power
       JsonObject AppPower = doc.createNestedObject("ApparentPower");
       DEBUGPRINTLNDEBUG("Apparent Power");
-      value = EnergyMeter.getApparentPowerTotal() * 1000;
+      value = EnergyMeter.readVal(SDM_TOTAL_SYSTEM_APPARENT_POWER);
       AppPower["Total"] = value;
       DEBUGPRINTDEBUG("Total: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getApparentPowerL1() * 1000;
+      value = EnergyMeter.readVal(SDM_PHASE_1_APPARENT_POWER);
       AppPower["L1"] = value;
       DEBUGPRINTDEBUG(" L1: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getApparentPowerL2() * 1000;
+      value = EnergyMeter.readVal(SDM_PHASE_2_APPARENT_POWER);
       AppPower["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getApparentPowerL3() * 1000;
+      value = EnergyMeter.readVal(SDM_PHASE_3_APPARENT_POWER);
       AppPower["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
       DEBUGPRINTDEBUG(value);
@@ -356,26 +358,26 @@ void loop()
       //Power Factor
       JsonObject PowerFactor = doc.createNestedObject("PowerFactor");
       DEBUGPRINTLNDEBUG("Power Factor");
-      value = EnergyMeter.getPowerFactorTotal();
+      value = EnergyMeter.readVal(SDM_TOTAL_SYSTEM_POWER_FACTOR);
       PowerFactor["Total"] = value;
       DEBUGPRINTDEBUG("Total: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getPowerFactorL1();
+      value = EnergyMeter.readVal(SDM_PHASE_1_POWER_FACTOR);
       PowerFactor["L1"] = value;
       DEBUGPRINTDEBUG(" L1: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getPowerFactorL2();
+      value = EnergyMeter.readVal(SDM_PHASE_2_POWER_FACTOR);
       PowerFactor["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getPowerFactorL3();
+      value = EnergyMeter.readVal(SDM_PHASE_3_POWER_FACTOR);
       PowerFactor["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
       DEBUGPRINTLNDEBUG(value);
 
       //Counter
       JsonObject CounterActPower = doc.createNestedObject("CountActPower");
-      value = EnergyMeter.getTotalCounterActivePowerTotal();
+      value = EnergyMeter.readVal(SDM_TOTAL_ACTIVE_ENERGY);
       DEBUGPRINTNONE("Verbrauch: ");
       DEBUGPRINTNONE(value);
       DEBUGPRINTLNNONE("kWh ");
@@ -383,15 +385,15 @@ void loop()
       CounterActPower["Total"] = value;
       DEBUGPRINTDEBUG("Total: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getTotalCounterActivePowerL1();
+      value = EnergyMeter.readVal(SDM_L1_TOTAL_ACTIVE_ENERGY);
       CounterActPower["L1"] = value;
       DEBUGPRINTDEBUG(" L1: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getTotalCounterActivePowerL2();
+      value = EnergyMeter.readVal(SDM_L2_TOTAL_ACTIVE_ENERGY);
       CounterActPower["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getTotalCounterActivePowerL3();
+      value = EnergyMeter.readVal(SDM_L3_TOTAL_ACTIVE_ENERGY);
       CounterActPower["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
       DEBUGPRINTDEBUG(value);
@@ -399,19 +401,19 @@ void loop()
 
       JsonObject CounterReactPower = doc.createNestedObject("CountReactPower");
       DEBUGPRINTLNDEBUG("Counter Reactive Power");
-      value = EnergyMeter.getTotalCounterReactivePowerTotal();
+      value = EnergyMeter.readVal(SDM_TOTAL_REACTIVE_ENERGY);
       CounterReactPower["Total"] = value;
       DEBUGPRINTDEBUG("Total: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getTotalCounterReactivePowerL1();
+      value = EnergyMeter.readVal(SDM_L1_TOTAL_REACTIVE_ENERGY);
       CounterReactPower["L1"] = value;
       DEBUGPRINTDEBUG(" L1: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getTotalCounterReactivePowerL2();
+      value = EnergyMeter.readVal(SDM_L2_TOTAL_REACTIVE_ENERGY);
       CounterReactPower["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getTotalCounterReactivePowerL3();
+      value = EnergyMeter.readVal(SDM_L3_TOTAL_REACTIVE_ENERGY);
       CounterReactPower["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
       DEBUGPRINTDEBUG(value);
@@ -419,19 +421,19 @@ void loop()
       //Counter Import
       JsonObject CounterImportActPower = doc.createNestedObject("CountImportActPower");
       DEBUGPRINTLNDEBUG("Counter Import Active Power");
-      value = EnergyMeter.getImportCounterActivePowerTotal();
+      value = EnergyMeter.readVal(SDM_IMPORT_ACTIVE_ENERGY);
       CounterImportActPower["Total"] = value;
       DEBUGPRINTDEBUG("Total: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getImportCounterActivePowerL1();
+      value = EnergyMeter.readVal(SDM_L1_IMPORT_ACTIVE_ENERGY);
       CounterImportActPower["L1"] = value;
       DEBUGPRINTDEBUG(" L1: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getImportCounterActivePowerL2();
+      value = EnergyMeter.readVal(SDM_L2_IMPORT_ACTIVE_ENERGY);
       CounterImportActPower["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getImportCounterActivePowerL3();
+      value = EnergyMeter.readVal(SDM_L3_IMPORT_ACTIVE_ENERGY);
       CounterImportActPower["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
       DEBUGPRINTDEBUG(value);
@@ -439,19 +441,19 @@ void loop()
 
       JsonObject CounterImportReactPower = doc.createNestedObject("CountImportReactPower");
       DEBUGPRINTLNDEBUG("Counter Import Reactive Power");
-      value = EnergyMeter.getImportCounterReactivePowerTotal();
+      value = EnergyMeter.readVal(SDM_IMPORT_REACTIVE_ENERGY);
       CounterImportReactPower["Total"] = value;
       DEBUGPRINTDEBUG("Total: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getImportCounterReactivePowerL1();
+      value = EnergyMeter.readVal(SDM_L1_IMPORT_REACTIVE_ENERGY);
       CounterImportReactPower["L1"] = value;
       DEBUGPRINTDEBUG(" L1: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getImportCounterReactivePowerL2();
+      value = EnergyMeter.readVal(SDM_L2_IMPORT_REACTIVE_ENERGY);
       CounterImportReactPower["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getImportCounterReactivePowerL3();
+      value = EnergyMeter.readVal(SDM_L3_IMPORT_REACTIVE_ENERGY);
       CounterImportReactPower["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
       DEBUGPRINTDEBUG(value);
@@ -460,19 +462,19 @@ void loop()
       //Counter Export
       JsonObject CounterExportActPower = doc.createNestedObject("CountExportActPower");
       DEBUGPRINTLNDEBUG("Counter Export Active Power");
-      value = EnergyMeter.getExportCounterActivePowerTotal();
+      value = EnergyMeter.readVal(SDM_EXPORT_ACTIVE_ENERGY);
       CounterExportActPower["Total"] = value;
       DEBUGPRINTDEBUG("Total: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getExportCounterActivePowerL1();
+      value = EnergyMeter.readVal(SDM_L1_EXPORT_ACTIVE_ENERGY);
       CounterExportActPower["L1"] = value;
       DEBUGPRINTDEBUG(" L1: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getExportCounterActivePowerL2();
+      value = EnergyMeter.readVal(SDM_L2_EXPORT_ACTIVE_ENERGY);
       CounterExportActPower["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getExportCounterActivePowerL3();
+      value = EnergyMeter.readVal(SDM_L3_EXPORT_ACTIVE_ENERGY);
       CounterExportActPower["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
       DEBUGPRINTDEBUG(value);
@@ -480,44 +482,44 @@ void loop()
 
       JsonObject CounterExportReactPower = doc.createNestedObject("CountExportReactPower");
       DEBUGPRINTLNDEBUG("Counter Export Reactive Power");
-      value = EnergyMeter.getExportCounterReactivePowerTotal();
+      value = EnergyMeter.readVal(SDM_EXPORT_REACTIVE_ENERGY);
       CounterExportReactPower["Total"] = value;
       DEBUGPRINTDEBUG("Total: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getExportCounterReactivePowerL1();
+      value = EnergyMeter.readVal(SDM_L1_EXPORT_REACTIVE_ENERGY);
       CounterExportReactPower["L1"] = value;
       DEBUGPRINTDEBUG(" L1: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getExportCounterReactivePowerL2();
+      value = EnergyMeter.readVal(SDM_L2_EXPORT_REACTIVE_ENERGY);
       CounterExportReactPower["L2"] = value;
       DEBUGPRINTDEBUG(" L2: ");
       DEBUGPRINTDEBUG(value);
-      value = EnergyMeter.getExportCounterReactivePowerL3();
+      value = EnergyMeter.readVal(SDM_L3_EXPORT_REACTIVE_ENERGY);
       CounterExportReactPower["L3"] = value;
       DEBUGPRINTDEBUG(" L3: ");
       DEBUGPRINTDEBUG(value);
       DEBUGPRINTLNDEBUG(" kvarh");
 
-      DEBUGPRINTDEBUG("getSerialNo: ");
-      DEBUGPRINTLNDEBUG(EnergyMeter.getSerialNo());
-      DEBUGPRINTDEBUG("getMeterId: ");
-      DEBUGPRINTLNDEBUG(EnergyMeter.getMeterId());
-      DEBUGPRINTDEBUG("getBusBaud: ");
-      DEBUGPRINTLNDEBUG(EnergyMeter.getBusBaud());
-      DEBUGPRINTDEBUG("getSoftwareVersion: ");
-      DEBUGPRINTLNDEBUG(EnergyMeter.getSoftwareVersion());
-      DEBUGPRINTDEBUG("getHardwareVersion: ");
-      DEBUGPRINTLNDEBUG(EnergyMeter.getHardwareVersion());
-      DEBUGPRINTDEBUG("getCountRate: ");
-      DEBUGPRINTLNDEBUG(EnergyMeter.getCountRate());
-      DEBUGPRINTDEBUG("getS0Rate: ");
-      DEBUGPRINTLNDEBUG(EnergyMeter.getS0Rate());
-      DEBUGPRINTDEBUG("getA3: ");
-      DEBUGPRINTLNDEBUG(EnergyMeter.getA3());
-      DEBUGPRINTDEBUG("getCycleTime: ");
-      DEBUGPRINTLNDEBUG(EnergyMeter.getCycleTime());
-      DEBUGPRINTDEBUG("getCrc: ");
-      DEBUGPRINTLNDEBUG(EnergyMeter.getCrc());
+      // DEBUGPRINTDEBUG("getSerialNo: ");
+      // DEBUGPRINTLNDEBUG(EnergyMeter.getSerialNo());
+      // DEBUGPRINTDEBUG("getMeterId: ");
+      // DEBUGPRINTLNDEBUG(EnergyMeter.getMeterId());
+      // DEBUGPRINTDEBUG("getBusBaud: ");
+      // DEBUGPRINTLNDEBUG(EnergyMeter.getBusBaud());
+      // DEBUGPRINTDEBUG("getSoftwareVersion: ");
+      // DEBUGPRINTLNDEBUG(EnergyMeter.getSoftwareVersion());
+      // DEBUGPRINTDEBUG("getHardwareVersion: ");
+      // DEBUGPRINTLNDEBUG(EnergyMeter.getHardwareVersion());
+      // DEBUGPRINTDEBUG("getCountRate: ");
+      // DEBUGPRINTLNDEBUG(EnergyMeter.getCountRate());
+      // DEBUGPRINTDEBUG("getS0Rate: ");
+      // DEBUGPRINTLNDEBUG(EnergyMeter.getS0Rate());
+      // DEBUGPRINTDEBUG("getA3: ");
+      // DEBUGPRINTLNDEBUG(EnergyMeter.getA3());
+      // DEBUGPRINTDEBUG("getCycleTime: ");
+      // DEBUGPRINTLNDEBUG(EnergyMeter.getCycleTime());
+      // DEBUGPRINTDEBUG("getCrc: ");
+      // DEBUGPRINTLNDEBUG(EnergyMeter.getCrc());
 
       DEBUGPRINTDEBUG("MemUsage.........: ");
       DEBUGPRINTLNDEBUG(doc.memoryUsage());
