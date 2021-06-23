@@ -21,10 +21,10 @@
 #include <SDM.h>
 
 //#include "Config.h" // make your own config file or remove this line and use the following lines
-const char *clientId = "Energy2";
+const char *clientId = "Energy";
 const char *mqtt_server = "192.168.2.64";
 #include "WifiCredentials.h"       // const char* ssid = "MySSID"; const char* WifiPassword = "MyPw";
-IPAddress ip(192, 168, 2, 10);      // Static IP
+IPAddress ip(192, 168, 2, 7);      // Static IP
 IPAddress dns(192, 168, 2, 1);     // most likely your router
 IPAddress gateway(192, 168, 2, 1); // most likely your router
 IPAddress subnet(255, 255, 255, 0);
@@ -32,7 +32,7 @@ IPAddress subnet(255, 255, 255, 0);
 unsigned long lastUpdated;
 unsigned long lastLed;
 unsigned long entry;
-const char *nameprefix = "MeterLogger2";
+const char *nameprefix = "MeterLogger";
 uint8_t stateLed = HIGH;
 boolean updateActive;
 RTC_DATA_ATTR unsigned long bootCount;
