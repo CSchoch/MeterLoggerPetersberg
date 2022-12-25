@@ -39,7 +39,7 @@ RTC_DATA_ATTR unsigned long bootCount;
 RTC_DATA_ATTR boolean enableUpdate;
 size_t DebugMessage;
 
-SDM EnergyMeter(Serial1, 9600, NOT_A_PIN, SDM_UART_CONFIG, ENERGY_RX_PIN, ENERGY_TX_PIN);
+SDM EnergyMeter(Serial1, 19200, NOT_A_PIN, SDM_UART_CONFIG, ENERGY_RX_PIN, ENERGY_TX_PIN);
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
